@@ -37,15 +37,19 @@ class Gem::Commands::UnusedCommand < Gem::Command
   end
 
   def find_unused_gems
-    puts "I'm finding your unused gems...(not yet though)"
+    @requirements = []
     options[:branches].each do |branch|
       `git co #{branch}`
-      puts "======#{branch}======="
       bundle = ::Bundler::LockfileParser.new(File.read("Gemfile.lock"))
-      bundle.specs.each do |spec|
-        puts "#{spec.name} (#{spec.version})"
-      end
+      @requirements.concat bundle.specs
     end
+    @requirements.uniq! {|spec| "#{spec.name} #{spec.version}" }
+    puts "These are the requirements of your lockfiles:"
+    @requirements.each do |spec|
+      puts "#{spec.name} #{spec.version}"
+    end
+    # now we need to find all the gems in the gemset
+
   end
 
   def remove_unused_gems
