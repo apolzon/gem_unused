@@ -83,12 +83,9 @@ class Gem::Commands::UnusedCommand < Gem::Command
   end
 
   def retrieve_installed
-    @installed = []
-    # TODO: we need to skip any that are installed in the global gemset
-    Gem::Specification.find_all do |installed_spec|
-      @installed << installed_spec
-    end
-    @installed.uniq! { |spec| "#{spec.name} #{spec.version}" }
+    @installed = Gem::Specification.find_all do |installed_spec|
+      !installed_spec.gem_dir.match /@global/
+    end.uniq { |spec| "#{spec.name} #{spec.version}" }
   end
 
   def setup_excluded_gems
