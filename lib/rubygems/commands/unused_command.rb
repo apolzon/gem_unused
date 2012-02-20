@@ -20,14 +20,31 @@ class Gem::Commands::UnusedCommand < Gem::Command
       options[:remove] = true
     end
 
-    add_option("", "--branches BRANCH", "Set branch names to check for currently used gems. Space separated, surround with a string (\"master staging production\")") do |value, options|
+    add_option("", "--branches BRANCH",
+               "Set branch names to check for currently used gems.
+                Space separated, surround with a string (\"master staging production\")"
+    ) do |value, options|
       options[:branches] = value
+    end
+
+    add_option("", "--exclude GEM",
+               "Set gem names to exclude from check.
+                These gems should really be installed in the global gemset.
+                Surround with a string for multiples (\"gem_a gem_b gem_c\")"
+    ) do |value, options|
+      options[:excluded_gems] = value
+    end
+
+    add_option("-q", "--quiet",
+              "Make this script perform its work quietly"
+    ) do |value, options|
+      options[:quiet] = true
     end
   end
 
   def execute
     if options[:branches].nil?
-      puts "no branch names provided. using master, staging, and production as default."
+      log "no branch names provided. using master, staging, and production as default."
       options[:branches] = %w(master staging production)
     else
       options[:branches] = options[:branches].split
@@ -37,34 +54,66 @@ class Gem::Commands::UnusedCommand < Gem::Command
   end
 
   def find_unused_gems
+    retrieve_requirements
+    retrieve_installed
+
+    @unneeded = @installed.delete_if do |installed_spec|
+      # remove any required installed gems
+      @requirements.any? do |spec|
+        spec.name == installed_spec.name &&
+          spec.version == installed_spec.version
+      end
+    end
+
+    log "====REMOVE THESE GEMS===="
+    @unneeded.each do |bad_gem|
+      log "#{bad_gem.name} #{bad_gem.version}"
+    end
+  end
+
+  def retrieve_requirements
+    read_requirements
+    setup_excluded_gems
+    @requirements.uniq! { |spec| "#{spec.name} #{spec.version}" }
+    log "These are the requirements of your lockfiles:"
+    @requirements.each do |spec|
+      log "#{spec.name} #{spec.version}"
+    end
+    # TODO: somewhere we need to skip/omit those excluded gems
+  end
+
+  def retrieve_installed
+    @installed = []
+    # TODO: we need to skip any that are installed in the global gemset
+    Gem::Specification.find_all do |installed_spec|
+      @installed << installed_spec
+    end
+    @installed.uniq! { |spec| "#{spec.name} #{spec.version}" }
+  end
+
+  def setup_excluded_gems
+    if options[:excluded_gems].nil?
+      log "Not excluding any gems."
+    else
+      options[:excluded_gems] = options[:excluded_gems].split
+      log "Excluding the following gems: #{options[:excluded_gems]}"
+    end
+  end
+
+  def read_requirements
     @requirements = []
     options[:branches].each do |branch|
       `git co #{branch}`
       bundle = ::Bundler::LockfileParser.new(File.read("Gemfile.lock"))
       @requirements.concat bundle.specs
     end
-    @requirements.uniq! {|spec| "#{spec.name} #{spec.version}" }
-    puts "These are the requirements of your lockfiles:"
-    @requirements.each do |spec|
-      puts "#{spec.name} #{spec.version}"
-    end
-    # now we need to find all the gems in the gemset
-    @installed = []
-    # TODO: we need to skip any that are installed in the global gemset
-    Gem::Specification.find_all do |installed_spec|
-      @installed << installed_spec
-    end
-    @installed.uniq! {|spec| "#{spec.name} #{spec.version}" }
-    @unneeded = @installed.delete_if do |installed_spec|
-      @requirements.any? {|spec| spec.name == installed_spec.name && spec.version == installed_spec.version}
-    end
-    puts "====REMOVE THESE GEMS===="
-    @unneeded.each do |bad_gem|
-      puts "#{bad_gem.name} #{bad_gem.version}"
-    end
   end
 
   def remove_unused_gems
-    puts "I'm removing your unused gems....mwuahahahha!!!"
+    log "I'm removing your unused gems....mwuahahahha!!!"
+  end
+
+  def log message
+    puts message unless options[:quiet]
   end
 end
