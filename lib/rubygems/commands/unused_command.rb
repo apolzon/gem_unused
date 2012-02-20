@@ -41,7 +41,6 @@ class Gem::Commands::UnusedCommand < Gem::Command
     options[:branches].each do |branch|
       `git co #{branch}`
       bundle = ::Bundler::LockfileParser.new(File.read("Gemfile.lock"))
-      # this is omitting development dependencies
       @requirements.concat bundle.specs
     end
     @requirements.uniq! {|spec| "#{spec.name} #{spec.version}" }
